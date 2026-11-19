@@ -9,6 +9,9 @@ struct ContentView: View {
     @State private var message = ""
     @State private var saving = false
     @State private var showEdit = false
+    @State private var videos: [URL] = []
+    @State private var findingVideo = false
+    @State private var savingVideo = false
 
     private var parts: (String, String) { Splitter.split(post.text) }
 
@@ -29,6 +32,8 @@ struct ContentView: View {
                         previews
                         saveButton
                     }
+
+                    videoSection
 
                     DisclosureGroup("Edit post", isExpanded: $showEdit) { editor }
                         .padding(12)
@@ -85,6 +90,14 @@ struct ContentView: View {
         let input = link
         loading = true
         message = ""
+        videos = []
+        if let url = PostFetcher.postURL(from: input) {
+            findingVideo = true
+            Task {
+                videos = await VideoFinder.find(url)
+                findingVideo = false
+            }
+        }
         Task {
             do {
                 let f = try await PostFetcher.fetch(input)
@@ -159,6 +172,43 @@ struct ContentView: View {
                 message = error.localizedDescription
             }
             saving = false
+        }
+    }
+
+    // MARK: - Video
+
+    @ViewBuilder private var videoSection: some View {
+        if findingVideo {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Looking for video...").font(.footnote).foregroundStyle(.secondary)
+            }
+        } else if !videos.isEmpty {
+            Button {
+                saveVideos()
+            } label: {
+                Label(savingVideo ? "Saving video..." : (videos.count == 1 ? "Save Video" : "Save \(videos.count) Videos"),
+                      systemImage: "video.badge.plus")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+            .buttonStyle(.bordered)
+            .disabled(savingVideo)
+        }
+    }
+
+    private func saveVideos() {
+        let urls = videos
+        savingVideo = true
+        Task {
+            do {
+                try await VideoSaver.save(urls)
+                message = urls.count == 1 ? "Saved the video to Photos." : "Saved \(urls.count) videos to Photos."
+            } catch {
+                message = error.localizedDescription
+            }
+            savingVideo = false
         }
     }
 

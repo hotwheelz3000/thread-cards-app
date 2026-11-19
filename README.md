@@ -6,7 +6,7 @@ An iPhone app that turns a Threads post into two story-size images (1080 x 1920)
 
 1. In Threads, tap Share > Copy link on a post.
 2. In Thread Cards, tap **Paste & Get**. The app reads the post: name, checkmark, picture, text, time and counts.
-3. Check the two previews, then tap **Save to Photos**.
+3. Check the two previews, then tap **Save to Photos**. If the post has a video, **Save Video** saves it too.
 
 If the post can't be read, open **Edit post** and type or paste the text. Every field there can be changed before saving.
 
