@@ -17,7 +17,10 @@ struct ContentView: View {
     /// The link of the post on screen (for History).
     @State private var shownLink = ""
 
-    private var parts: [String] { Splitter.parts(post.text) }
+    /// One card per post in the thread: the linked post, then the author's follow-ups.
+    private var parts: [String] {
+        ([post.text] + post.followUps).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
 
     var body: some View {
         NavigationStack {
@@ -35,6 +38,14 @@ struct ContentView: View {
                     if !post.text.isEmpty {
                         previews
                         saveButton
+                    }
+
+                    if findingVideo {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Looking for the rest of the thread and videos...")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                     }
 
                     videoSection
@@ -122,6 +133,7 @@ struct ContentView: View {
                 if let url = f.avatarURL, let data = await PostFetcher.downloadImage(url) {
                     p.avatar = UIImage(data: data)
                 }
+                p.followUps = post.followUps.isEmpty || shownLink != input ? pendingFollowUps(for: input) : post.followUps
                 post = p
                 shownLink = input
                 history.save(link: input, post: p, hadVideo: !videos.isEmpty)
@@ -137,18 +149,44 @@ struct ContentView: View {
         }
     }
 
-    private func findVideos(_ input: String) {
+    /// Follow-up texts found before the main post finished loading.
+    @State private var earlyFollowUps: [String: [String]] = [:]
+
+    private func pendingFollowUps(for input: String) -> [String] {
+        earlyFollowUps[HistoryStore.key(input)] ?? []
+    }
+
+    /// Opens the post page in the background: finds videos and the author's
+    /// next posts in the thread, then reads each of those posts' text.
+    private func findVideos(_ input: String, threadToo: Bool = true) {
         videos = []
         guard let url = PostFetcher.postURL(from: input) else { return }
         findingVideo = true
+        let key = HistoryStore.key(input)
         Task {
-            let found = await VideoFinder.find(url)
+            let page = await VideoFinder.find(url)
             // Ignore the result if another post was fetched meanwhile.
-            guard HistoryStore.key(link) == HistoryStore.key(input) else { return }
-            videos = found
+            guard HistoryStore.key(link) == key else { return }
+            videos = page.videoURLs
+
+            var texts: [String] = []
+            if threadToo {
+                for next in page.followUps {
+                    guard let f = try? await PostFetcher.fetch(next.absoluteString),
+                          let t = f.text, !t.isEmpty else { break }
+                    texts.append(t)
+                }
+            }
+            guard HistoryStore.key(link) == key else { return }
             findingVideo = false
-            if !found.isEmpty, HistoryStore.key(shownLink) == HistoryStore.key(input) {
-                history.save(link: input, post: post, hadVideo: true)
+
+            if HistoryStore.key(shownLink) == key {
+                if threadToo, !texts.isEmpty { post.followUps = texts }
+                if !texts.isEmpty || !videos.isEmpty {
+                    history.save(link: input, post: post, hadVideo: !videos.isEmpty)
+                }
+            } else if !texts.isEmpty {
+                earlyFollowUps[key] = texts // the main post is still loading
             }
         }
     }
@@ -161,7 +199,7 @@ struct ContentView: View {
         videos = []
         findingVideo = false
         // Threads video links expire, so look them up again.
-        if item.hadVideo { findVideos(item.link) }
+        if item.hadVideo { findVideos(item.link, threadToo: false) }
     }
 
     // MARK: - Preview + save
@@ -169,14 +207,13 @@ struct ContentView: View {
     private var previews: some View {
         let previewScale: CGFloat = 0.62
         return ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 ForEach(Array(parts.enumerated()), id: \.offset) { i, text in
-                    StoryView(post: post, text: text, index: i + 1, total: parts.count)
-                        .scaleEffect(previewScale, anchor: .topLeading)
-                        .frame(width: Look.storySize.width * previewScale,
-                               height: Look.storySize.height * previewScale,
-                               alignment: .topLeading)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    Scaled(scale: previewScale) {
+                        StoryView(post: post, text: text, index: i + 1, total: parts.count)
+                            .scaleEffect(previewScale, anchor: .topLeading)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
             }
         }
@@ -221,12 +258,7 @@ struct ContentView: View {
     // MARK: - Video
 
     @ViewBuilder private var videoSection: some View {
-        if findingVideo {
-            HStack(spacing: 8) {
-                ProgressView()
-                Text("Looking for video...").font(.footnote).foregroundStyle(.secondary)
-            }
-        } else if !videos.isEmpty {
+        if !findingVideo && !videos.isEmpty {
             Button {
                 saveVideos()
             } label: {
@@ -264,11 +296,28 @@ struct ContentView: View {
                 .autocorrectionDisabled()
             Toggle("Verified checkmark", isOn: $post.verified)
             TextField("Time (e.g. 6h)", text: $post.time)
-            Text("Post text").font(.caption).foregroundStyle(.secondary)
+            Text(post.followUps.isEmpty ? "Post text" : "Post 1").font(.caption).foregroundStyle(.secondary)
             TextEditor(text: $post.text)
                 .frame(minHeight: 160)
                 .scrollContentBackground(.hidden)
                 .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
+            ForEach(post.followUps.indices, id: \.self) { i in
+                HStack {
+                    Text("Post \(i + 2)").font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Remove", role: .destructive) { post.followUps.remove(at: i) }
+                        .font(.caption)
+                }
+                TextEditor(text: Binding(
+                    get: { i < post.followUps.count ? post.followUps[i] : "" },
+                    set: { if i < post.followUps.count { post.followUps[i] = $0 } }
+                ))
+                    .frame(minHeight: 120)
+                    .scrollContentBackground(.hidden)
+                    .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
+            }
+            Button("Add next post") { post.followUps.append("") }
+                .font(.callout)
             HStack {
                 TextField("Likes", text: $post.likes)
                 TextField("Replies", text: $post.replies)

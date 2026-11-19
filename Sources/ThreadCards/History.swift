@@ -9,6 +9,7 @@ struct SavedPost: Codable, Identifiable, Equatable {
     var verified: Bool
     var time: String
     var text: String
+    var followUps: [String]?
     var likes: String
     var replies: String
     var reposts: String
@@ -23,6 +24,7 @@ struct SavedPost: Codable, Identifiable, Equatable {
         verified = post.verified
         time = post.time
         text = post.text
+        followUps = post.followUps
         likes = post.likes
         replies = post.replies
         reposts = post.reposts
@@ -38,6 +40,7 @@ struct SavedPost: Codable, Identifiable, Equatable {
         p.verified = verified
         p.time = time
         p.text = text
+        p.followUps = followUps ?? []
         p.likes = likes
         p.replies = replies
         p.reposts = reposts

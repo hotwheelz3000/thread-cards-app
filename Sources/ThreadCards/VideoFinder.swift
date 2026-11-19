@@ -3,8 +3,39 @@ import Photos
 import UIKit
 import WebKit
 
+/// What the hidden web view found on the post page.
+struct PageInfo: Sendable {
+    var videos: [String] = []
+    var links: [String] = []
+    var path = ""
+
+    var videoURLs: [URL] { videos.compactMap(URL.init(string:)) }
+
+    /// The author's next posts in the same thread (2/2, 3/3...), as full links:
+    /// the posts by the same author right after this one, up to the first post by someone else.
+    var followUps: [URL] {
+        func parts(_ l: String) -> (user: String, code: String)? {
+            let c = l.split(separator: "/").map(String.init) // ["@name", "post", "CODE"]
+            guard c.count >= 3, c[0].hasPrefix("@"), c[1] == "post" else { return nil }
+            return (String(c[0].dropFirst()).lowercased(), c[2])
+        }
+        let posts = links.compactMap(parts)
+        guard !posts.isEmpty else { return [] }
+        var start = 0
+        if let here = parts(path), let i = posts.firstIndex(where: { $0.code == here.code }) { start = i }
+        let author = posts[start].user
+        var out: [URL] = []
+        for p in posts.dropFirst(start + 1) {
+            guard p.user == author else { break }
+            if let u = URL(string: "https://www.threads.com/@\(p.user)/post/\(p.code)") { out.append(u) }
+            if out.count == 9 { break }
+        }
+        return out
+    }
+}
+
 /// Opens a Threads post in a hidden web view (the way Safari would) and
-/// reads the addresses of its video files.
+/// reads its video files and the other posts in the thread.
 @MainActor
 enum VideoFinder {
     private static let script = """
@@ -21,12 +52,18 @@ enum VideoFinder {
         let m;
         while ((m = re.exec(html))) { try { add(JSON.parse('"' + m[1] + '"')); } catch (e) {} }
       }
-      return out.filter(u => u.startsWith('http'));
+      // Every post on the page, in order, as /@name/post/CODE.
+      const links = [];
+      document.querySelectorAll('a[href*="/post/"]').forEach(a => {
+        const m = (a.getAttribute('href') || '').match(/\\/@([^\\/?#]+)\\/post\\/([^\\/?#]+)/);
+        if (m) { const l = '/@' + m[1] + '/post/' + m[2]; if (!links.includes(l)) links.push(l); }
+      });
+      return { videos: out.filter(u => u.startsWith('http')), links: links, path: location.pathname };
     })()
     """
 
-    /// Video URLs for the post, or [] if it has none (or they couldn't be found).
-    static func find(_ postURL: URL, timeout: TimeInterval = 20) async -> [URL] {
+    /// The post's videos and the posts around it.
+    static func find(_ postURL: URL, timeout: TimeInterval = 20) async -> PageInfo {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -44,22 +81,35 @@ enum VideoFinder {
         web.load(URLRequest(url: postURL))
 
         let deadline = Date().addingTimeInterval(timeout)
-        var last: [String] = []
+        var last = PageInfo()
+        var best = PageInfo()
+        var steady = 0
         while Date() < deadline {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             let found = await read(web)
-            // Return once the list has settled for a second.
-            if !found.isEmpty && found == last { break }
+            if !found.videos.isEmpty { best.videos = found.videos }
+            if found.links.count >= best.links.count { best.links = found.links }
+            if !found.path.isEmpty { best.path = found.path }
+            // Stop once the page has settled: same posts and videos for 2 seconds.
+            if !found.links.isEmpty && found.links == last.links && found.videos == last.videos {
+                steady += 1
+                if steady >= 2 { break }
+            } else {
+                steady = 0
+            }
             last = found
         }
         web.stopLoading()
-        return last.compactMap(URL.init(string:))
+        return best
     }
 
-    private static func read(_ web: WKWebView) async -> [String] {
+    private static func read(_ web: WKWebView) async -> PageInfo {
         await withCheckedContinuation { cont in
             web.evaluateJavaScript(script) { result, _ in
-                cont.resume(returning: (result as? [String]) ?? [])
+                let d = result as? [String: Any]
+                cont.resume(returning: PageInfo(videos: d?["videos"] as? [String] ?? [],
+                                                links: d?["links"] as? [String] ?? [],
+                                                path: d?["path"] as? String ?? ""))
             }
         }
     }

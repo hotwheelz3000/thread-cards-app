@@ -7,6 +7,8 @@ struct PostInfo {
     var verified = true
     var time = ""
     var text = ""
+    /// The author's next posts in the thread (cards 2/2, 3/3...).
+    var followUps: [String] = []
     var likes = ""
     var replies = ""
     var reposts = ""
@@ -36,19 +38,30 @@ struct StoryView: View {
     let index: Int
     let total: Int
 
+    /// 1080 x 1920; a post too long for that keeps its text size and the image gets taller.
     var body: some View {
-        ZStack {
-            Look.storyBackground
-            // Shrinks the type only when a very long half wouldn't fit.
-            ViewThatFits(in: .vertical) {
-                ForEach([1.0, 0.92, 0.84, 0.76, 0.68, 0.6, 0.52], id: \.self) { s in
-                    CardView(post: post, text: text, index: index, total: total, scale: s)
-                }
-            }
+        CardView(post: post, text: text, index: index, total: total)
             .padding(.vertical, 24)
-        }
-        .frame(width: Look.storySize.width, height: Look.storySize.height)
-        .environment(\.colorScheme, .dark)
+            .frame(width: Look.storySize.width)
+            .frame(minHeight: Look.storySize.height)
+            .background(Look.storyBackground)
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Shows a view at a fraction of its natural size, taking only the scaled space.
+struct Scaled: Layout {
+    var scale: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let s = subviews.first?.sizeThatFits(.unspecified) else { return .zero }
+        return CGSize(width: s.width * scale, height: s.height * scale)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let v = subviews.first else { return }
+        let s = v.sizeThatFits(.unspecified)
+        v.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(s))
     }
 }
 
