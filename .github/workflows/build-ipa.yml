@@ -5,14 +5,19 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the whole history, to count the builds of this version
 
       # The app name comes from `product:` in xtool.yml, so the IPA and the
-      # artifact follow the app automatically after ./rename-app.sh.
+      # artifact are named after the app.
       - name: Read app name
         id: app
         run: |
@@ -40,10 +45,51 @@ jobs:
           xtool --help
           xtool dev build --help
 
+      # Stamp the build's date and time into the app (shown at the bottom of the help
+      # window), so testers can say which build they have.
+      # The version comes from CFBundleShortVersionString in the Info.plist named by
+      # infoPath in xtool.yml (shown in Help as "Version 1.0").
+      - name: Stamp build info
+        id: info
+        env:
+          APP_NAME: ${{ steps.app.outputs.name }}
+        run: |
+          plist=$(awk -F': *' '$1 == "infoPath" { print $2 }' xtool.yml | tr -d "\"' \r")
+          version=$(plutil -extract CFBundleShortVersionString raw "$plist" 2>/dev/null || echo "")
+          # Build number: how many commits in a row (counting this one) have this version.
+          # The first build of a new version is 1 and isn't shown; later ones are, so every
+          # download has its own name (ThreadCards-1.0-3.ipa) and Help says "(build 3)".
+          ver_at() { git show "$1:$plist" 2>/dev/null | awk '/CFBundleShortVersionString/{getline; gsub(/.*<string>|<\/string>.*/,""); print; exit}'; }
+          build=0
+          for c in $(git rev-list --first-parent HEAD); do
+            [ "$(ver_at "$c")" = "$version" ] || break
+            build=$((build + 1))
+          done
+          label="Version ${version:-unknown}"
+          if [ -n "$version" ] && [ "$build" -gt 1 ]; then label="$label (build $build)"; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          cat > "Sources/$APP_NAME/BuildInfo.swift" <<EOF
+          /// Written by the Build IPA workflow.
+          enum BuildInfo {
+              static let label = "$label"
+          }
+          EOF
+          cat "Sources/$APP_NAME/BuildInfo.swift"
+
       # Builds for arm64-apple-ios (the default triple). Without --sign the
       # app is left unsigned; --ipa zips it into Payload/ as xtool/<App>.ipa.
+      # Compiler errors are also reported as annotations, so they show up on the
+      # run's summary page without opening the full log.
       - name: Build unsigned IPA
-        run: xtool dev build --ipa
+        run: |
+          set -o pipefail
+          if ! xtool dev build --ipa 2>&1 | tee build.log; then
+            grep -E "error:" build.log | sort -u | head -20 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
 
       - name: Package IPA manually if needed
         env:
@@ -58,8 +104,59 @@ jobs:
           fi
           ls -la xtool
 
-      - uses: actions/upload-artifact@v4
+      # Stamp the IPA with the build time as Los Angeles wall-clock time. Zip
+      # files store a time with no time zone, and the artifact upload writes it
+      # in UTC, which then shows 7-8 hours ahead on a phone in LA. Setting the
+      # file's time to "LA time, labelled as UTC" cancels that out (daylight
+      # saving is handled by the date command).
+      # Also makes a copy named with the app's version, plus the build number after the first
+      # build of a version (ThreadCards-1.0.ipa, then ThreadCards-1.0-2.ipa; the build
+      # time if there's no version). That copy is what the release and Actions download hold.
+      - name: Stamp IPA with build time
+        id: stamp
+        env:
+          APP_NAME: ${{ steps.app.outputs.name }}
+          version: ${{ steps.info.outputs.version }}
+          build: ${{ steps.info.outputs.build }}
+        run: |
+          la_now=$(TZ=America/Los_Angeles date +%Y%m%d%H%M.%S)
+          TZ=UTC touch -t "$la_now" "xtool/$APP_NAME.ipa"
+          stamp=$(TZ=America/Los_Angeles date '+%Y-%m-%d-%H%M')
+          file="$APP_NAME-${version:-$stamp}"
+          if [ -n "$version" ] && [ "${build:-0}" -gt 1 ]; then file="$file-$build"; fi
+          cp -p "xtool/$APP_NAME.ipa" "xtool/$file.ipa"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "label=$(TZ=America/Los_Angeles date '+%b %-d, %Y %-I:%M %p')" >> "$GITHUB_OUTPUT"
+          echo "Stamped with LA time $(TZ=America/Los_Angeles date '+%Y-%m-%d %H:%M %Z')"
+
+      - uses: actions/upload-artifact@v7
         with:
-          name: ${{ steps.app.outputs.name }}-ipa
-          path: xtool/${{ steps.app.outputs.name }}.ipa
+          name: ${{ steps.stamp.outputs.file }}
+          path: xtool/${{ steps.stamp.outputs.file }}.ipa
           if-no-files-found: error
+
+      # Every build of main is also published as the "latest" GitHub Release, so testers
+      # can download the IPA from a plain link (no GitHub login; artifacts need one).
+      # The title carries the app's version ("Thread Cards 1.0"); the notes come from
+      # RELEASE_NOTES.md plus the build time. A release left as a draft (it happened once)
+      # is published at the end, so the download link always works.
+      - name: Publish as latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_NAME: ${{ steps.app.outputs.name }}
+          file: ${{ steps.stamp.outputs.file }}
+          label: ${{ steps.stamp.outputs.label }}
+          version: ${{ steps.info.outputs.version }}
+        run: |
+          title="Thread Cards${version:+ $version}"
+          {
+            if [ -f RELEASE_NOTES.md ]; then cat RELEASE_NOTES.md; echo; fi
+            echo "Built from ${GITHUB_SHA::7} on $label (Los Angeles time). Download $file.ipa below and sign and install it (Signulous, Sideloadly or AltStore)."
+          } > release-notes.txt
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest "xtool/$file.ipa" \
+            --title "$title" \
+            --notes-file release-notes.txt \
+            --latest
+          gh release edit latest --draft=false

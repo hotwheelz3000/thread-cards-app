@@ -1,5 +1,6 @@
 version: 1
-bundleID: com.example.MyApp
+bundleID: com.hotwheelz3000.ThreadCards
 # The SwiftPM product used as the app. Also names the built .app/.ipa.
-# Change it with ./rename-app.sh rather than by hand.
-product: MyApp
+product: ThreadCards
+# Merged into the generated Info.plist (version, Photos permission, dark UI).
+infoPath: ThreadCards-Info.plist

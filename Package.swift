@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "MyApp",
+    name: "ThreadCards",
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
@@ -12,13 +12,13 @@ let package = Package(
         // An xtool project should contain exactly one library product,
         // representing the main app.
         .library(
-            name: "MyApp",
-            targets: ["MyApp"]
+            name: "ThreadCards",
+            targets: ["ThreadCards"]
         ),
     ],
     targets: [
         .target(
-            name: "MyApp"
+            name: "ThreadCards"
         ),
     ]
 )
