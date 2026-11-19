@@ -4,3 +4,5 @@ bundleID: com.hotwheelz3000.ThreadCards
 product: ThreadCards
 # Merged into the generated Info.plist (version, Photos permission, dark UI).
 infoPath: ThreadCards-Info.plist
+# 1024x1024 opaque PNG (stacked cards).
+iconPath: Resources/AppIcon.png
