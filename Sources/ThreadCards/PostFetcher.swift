@@ -7,10 +7,15 @@ struct FetchedPost: Sendable {
     var avatarURL: String?
     var verified: Bool?
     var takenAt: Date?
-    var likes: Int?
-    var replies: Int?
-    var reposts: Int?
-    var shares: Int?
+    // Display-ready counts ("531", "1.2K").
+    var likes: String?
+    var replies: String?
+    var reposts: String?
+    var shares: String?
+
+    var missingDetails: Bool {
+        username == nil || verified == nil || takenAt == nil || likes == nil
+    }
 }
 
 enum FetchError: LocalizedError {
@@ -62,9 +67,26 @@ enum PostFetcher {
             request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
             guard let result = try? await URLSession.shared.data(for: request),
                   let html = String(data: result.0, encoding: .utf8) else { continue }
-            let found = parse(html)
+            var found = parse(html)
+            // A short link redirects to the full /@name/post/... address.
+            if let final = result.1.url, let name = username(from: final) { found.username = name }
             best = merge(best, found)
-            if found.text != nil && found.likes != nil { break }
+            if found.text != nil && !best.missingDetails { break }
+        }
+
+        // The embed page (what Threads shows on other websites) has the name,
+        // checkmark, time and counts.
+        if best.missingDetails {
+            let embedURL = url.appendingPathComponent("embed")
+            var request = URLRequest(url: embedURL, timeoutInterval: 20)
+            request.setValue(userAgents[0], forHTTPHeaderField: "User-Agent")
+            if let result = try? await URLSession.shared.data(for: request),
+               let html = String(data: result.0, encoding: .utf8) {
+                var found = parse(html)
+                found.text = nil // keep the main page's text; the embed's may be cut short
+                best = merge(best, found)
+                best = merge(best, parseEmbed(html))
+            }
         }
 
         guard let text = best.text, !text.isEmpty else { throw FetchError.nothingFound }
@@ -103,10 +125,13 @@ enum PostFetcher {
         if let t = firstMatch(#""taken_at":(\d+)"#, in: html), let secs = Double(t) {
             p.takenAt = Date(timeIntervalSince1970: secs)
         }
-        p.likes = firstMatch(#""like_count":(\d+)"#, in: html).flatMap { Int($0) }
-        p.replies = firstMatch(#""direct_reply_count":(\d+)"#, in: html).flatMap { Int($0) }
-        p.reposts = firstMatch(#""repost_count":(\d+)"#, in: html).flatMap { Int($0) }
-        p.shares = firstMatch(#""reshare_count":(\d+)"#, in: html).flatMap { Int($0) }
+        p.likes = firstMatch(#""like_count":(\d+)"#, in: html).flatMap { Int($0) }.map(formatCount)
+        p.replies = firstMatch(#""direct_reply_count":(\d+)"#, in: html).flatMap { Int($0) }.map(formatCount)
+        p.reposts = firstMatch(#""repost_count":(\d+)"#, in: html).flatMap { Int($0) }.map(formatCount)
+        p.shares = firstMatch(#""reshare_count":(\d+)"#, in: html).flatMap { Int($0) }.map(formatCount)
+        if let raw = firstMatch(#""username":"# + jsonString, in: html) {
+            p.username = decodeJSONString(raw)
+        }
 
         // 2. The link-preview meta tags.
         let meta = metaTags(html)
@@ -114,6 +139,11 @@ enum PostFetcher {
             p.text = d
         }
         if p.avatarURL == nil { p.avatarURL = meta["og:image"] }
+        // "Display Name (@handle) on Threads"
+        if let title = meta["og:title"] ?? meta["twitter:title"],
+           let handle = firstMatch(#"\(@([A-Za-z0-9._]+)\)"#, in: title) {
+            p.username = handle
+        }
 
         if let text = p.text {
             p.text = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -121,10 +151,52 @@ enum PostFetcher {
         return p
     }
 
+    /// Reads the visible parts of the embed page: time, checkmark and counts.
+    static func parseEmbed(_ html: String) -> FetchedPost {
+        var p = FetchedPost()
+        if let iso = firstMatch(#"<time[^>]*datetime="([^"]+)""#, in: html) {
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            p.takenAt = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        }
+        if html.range(of: #"aria-label="Verified"|>Verified<|title="Verified""#,
+                      options: [.regularExpression, .caseInsensitive]) != nil {
+            p.verified = true
+        }
+        let text = visibleText(html)
+        let num = #"(\d[\d,.]*[KkMm]?)"#
+        p.likes = firstMatch(num + #"\s+likes?\b"#, in: text, caseInsensitive: true)
+        p.replies = firstMatch(num + #"\s+repl(?:y|ies)\b"#, in: text, caseInsensitive: true)
+        p.reposts = firstMatch(num + #"\s+reposts?\b"#, in: text, caseInsensitive: true)
+        p.shares = firstMatch(num + #"\s+shares?\b"#, in: text, caseInsensitive: true)
+        return p
+    }
+
+    /// Tags stripped, so "<span>531</span> likes" reads as "531 likes".
+    private static func visibleText(_ html: String) -> String {
+        var s = html.replacingOccurrences(of: #"<script[\s\S]*?</script>|<style[\s\S]*?</style>"#,
+                                          with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
+        s = decodeEntities(s)
+        return s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+    }
+
+    /// Threads style: 531, 1.2K, 12K, 3.4M.
+    static func formatCount(_ n: Int) -> String {
+        func short(_ v: Double, _ suffix: String) -> String {
+            let s = v < 10 ? String(format: "%.1f", v) : String(Int(v))
+            return (s.hasSuffix(".0") ? String(s.dropLast(2)) : s) + suffix
+        }
+        if n >= 1_000_000 { return short(Double(n) / 1_000_000, "M") }
+        if n >= 1_000 { return short(Double(n) / 1_000, "K") }
+        return String(n)
+    }
+
     // MARK: - Helpers
 
-    private static func firstMatch(_ pattern: String, in s: String) -> String? {
-        guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
+    private static func firstMatch(_ pattern: String, in s: String, caseInsensitive: Bool = false) -> String? {
+        guard let re = try? NSRegularExpression(pattern: pattern,
+                                                options: caseInsensitive ? [.caseInsensitive] : []) else { return nil }
         let ns = s as NSString
         guard let m = re.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)),
               m.numberOfRanges > 1,

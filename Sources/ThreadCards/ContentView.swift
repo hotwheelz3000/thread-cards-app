@@ -93,10 +93,10 @@ struct ContentView: View {
                 p.verified = f.verified ?? false
                 p.time = f.takenAt.map(Self.relativeTime) ?? ""
                 p.text = f.text ?? ""
-                p.likes = f.likes.map(Self.count) ?? ""
-                p.replies = f.replies.map(Self.count) ?? ""
-                p.reposts = f.reposts.map(Self.count) ?? ""
-                p.shares = f.shares.map(Self.count) ?? ""
+                p.likes = f.likes ?? ""
+                p.replies = f.replies ?? ""
+                p.reposts = f.reposts ?? ""
+                p.shares = f.shares ?? ""
                 if let url = f.avatarURL, let data = await PostFetcher.downloadImage(url) {
                     p.avatar = UIImage(data: data)
                 }
@@ -189,17 +189,7 @@ struct ContentView: View {
         .padding(.top, 8)
     }
 
-    // MARK: - Formatting (matches Threads: 531, 1.2K, 3.4M; 6h, 2d)
-
-    static func count(_ n: Int) -> String {
-        func short(_ v: Double, _ suffix: String) -> String {
-            let s = v < 10 ? String(format: "%.1f", v) : String(Int(v))
-            return (s.hasSuffix(".0") ? String(s.dropLast(2)) : s) + suffix
-        }
-        if n >= 1_000_000 { return short(Double(n) / 1_000_000, "M") }
-        if n >= 1_000 { return short(Double(n) / 1_000, "K") }
-        return String(n)
-    }
+    // MARK: - Formatting (matches Threads: 6h, 2d)
 
     static func relativeTime(_ date: Date) -> String {
         let secs = max(0, Int(Date().timeIntervalSince(date)))
