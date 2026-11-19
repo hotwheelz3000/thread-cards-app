@@ -17,9 +17,10 @@ struct ContentView: View {
     /// The link of the post on screen (for History).
     @State private var shownLink = ""
 
-    /// One card per post in the thread: the linked post, then the author's follow-ups.
+    /// The linked post, then the author's follow-ups; a post too long for one
+    /// card continues on the next. The pills count every card (1/3, 2/3, 3/3).
     private var parts: [String] {
-        ([post.text] + post.followUps).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        ([post.text] + post.followUps).flatMap(Paginator.pages)
     }
 
     var body: some View {

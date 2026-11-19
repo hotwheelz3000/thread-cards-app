@@ -38,7 +38,7 @@ struct StoryView: View {
     let index: Int
     let total: Int
 
-    /// 1080 x 1920; a post too long for that keeps its text size and the image gets taller.
+    /// 1080 x 1920 (long posts are spread over more cards by Paginator).
     var body: some View {
         CardView(post: post, text: text, index: index, total: total)
             .padding(.vertical, 24)
