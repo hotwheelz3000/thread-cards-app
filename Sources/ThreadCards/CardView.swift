@@ -76,13 +76,15 @@ struct CardView: View {
                 }
             }
 
-            Text("\(index)/\(total)")
-                .font(.system(size: 12 * scale, weight: .semibold))
-                .foregroundStyle(Look.gray)
-                .padding(.horizontal, 4.5 * scale)
-                .frame(height: 19 * scale)
-                .background(Look.pill, in: RoundedRectangle(cornerRadius: 6 * scale, style: .continuous))
-                .padding(.top, 8 * scale)
+            if total > 1 {
+                Text("\(index)/\(total)")
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .foregroundStyle(Look.gray)
+                    .padding(.horizontal, 4.5 * scale)
+                    .frame(height: 19 * scale)
+                    .background(Look.pill, in: RoundedRectangle(cornerRadius: 6 * scale, style: .continuous))
+                    .padding(.top, 8 * scale)
+            }
 
             if hasStats {
                 stats.padding(.top, 8 * scale)

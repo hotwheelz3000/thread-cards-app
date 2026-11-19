@@ -12,8 +12,12 @@ struct ContentView: View {
     @State private var videos: [URL] = []
     @State private var findingVideo = false
     @State private var savingVideo = false
+    @State private var history = HistoryStore()
+    @State private var showHistory = false
+    /// The link of the post on screen (for History).
+    @State private var shownLink = ""
 
-    private var parts: (String, String) { Splitter.split(post.text) }
+    private var parts: [String] { Splitter.parts(post.text) }
 
     var body: some View {
         NavigationStack {
@@ -47,6 +51,18 @@ struct ContentView: View {
             }
             .navigationTitle("Thread Cards")
             .scrollDismissesKeyboard(.interactively)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showHistory = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                }
+            }
+            .sheet(isPresented: $showHistory) {
+                HistoryView(store: history) { item in openSaved(item) }
+            }
         }
     }
 
@@ -90,14 +106,7 @@ struct ContentView: View {
         let input = link
         loading = true
         message = ""
-        videos = []
-        if let url = PostFetcher.postURL(from: input) {
-            findingVideo = true
-            Task {
-                videos = await VideoFinder.find(url)
-                findingVideo = false
-            }
-        }
+        findVideos(input)
         Task {
             do {
                 let f = try await PostFetcher.fetch(input)
@@ -114,6 +123,8 @@ struct ContentView: View {
                     p.avatar = UIImage(data: data)
                 }
                 post = p
+                shownLink = input
+                history.save(link: input, post: p, hadVideo: !videos.isEmpty)
                 message = ""
             } catch {
                 message = error.localizedDescription
@@ -126,14 +137,41 @@ struct ContentView: View {
         }
     }
 
+    private func findVideos(_ input: String) {
+        videos = []
+        guard let url = PostFetcher.postURL(from: input) else { return }
+        findingVideo = true
+        Task {
+            let found = await VideoFinder.find(url)
+            // Ignore the result if another post was fetched meanwhile.
+            guard HistoryStore.key(link) == HistoryStore.key(input) else { return }
+            videos = found
+            findingVideo = false
+            if !found.isEmpty, HistoryStore.key(shownLink) == HistoryStore.key(input) {
+                history.save(link: input, post: post, hadVideo: true)
+            }
+        }
+    }
+
+    private func openSaved(_ item: SavedPost) {
+        link = item.link
+        post = item.post
+        shownLink = item.link
+        message = ""
+        videos = []
+        findingVideo = false
+        // Threads video links expire, so look them up again.
+        if item.hadVideo { findVideos(item.link) }
+    }
+
     // MARK: - Preview + save
 
     private var previews: some View {
         let previewScale: CGFloat = 0.62
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-                ForEach(1...2, id: \.self) { i in
-                    StoryView(post: post, text: i == 1 ? parts.0 : parts.1, index: i, total: 2)
+                ForEach(Array(parts.enumerated()), id: \.offset) { i, text in
+                    StoryView(post: post, text: text, index: i + 1, total: parts.count)
                         .scaleEffect(previewScale, anchor: .topLeading)
                         .frame(width: Look.storySize.width * previewScale,
                                height: Look.storySize.height * previewScale,
@@ -159,15 +197,20 @@ struct ContentView: View {
 
     private func save() {
         saving = true
-        let images = [parts.0, parts.1].enumerated().compactMap { i, text -> Data? in
-            let renderer = ImageRenderer(content: StoryView(post: post, text: text, index: i + 1, total: 2))
+        let cards = parts
+        let images = cards.enumerated().compactMap { i, text -> Data? in
+            let renderer = ImageRenderer(content: StoryView(post: post, text: text, index: i + 1, total: cards.count))
             renderer.scale = 3
             return renderer.uiImage?.pngData()
         }
         Task {
             do {
                 try await PhotoSaver.save(images)
-                message = "Saved both cards to Photos."
+                message = images.count == 1 ? "Saved the card to Photos." : "Saved both cards to Photos."
+                // Keeps any edits in History.
+                if !shownLink.isEmpty {
+                    history.save(link: shownLink, post: post, hadVideo: !videos.isEmpty)
+                }
             } catch {
                 message = error.localizedDescription
             }

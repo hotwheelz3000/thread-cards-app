@@ -1,6 +1,30 @@
-import Foundation
+import UIKit
 
 enum Splitter {
+    /// Like Threads: one card if the post fits in 9 lines, otherwise two halves.
+    static func parts(_ text: String) -> [String] {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if lineCount(t) <= 9 { return [t] }
+        let (a, b) = split(t)
+        return b.isEmpty ? [a] : [a, b]
+    }
+
+    /// Lines the text takes on a card (15.5 pt, 275 pt wide).
+    static func lineCount(_ text: String) -> Int {
+        let font = UIFont.systemFont(ofSize: 15.5)
+        let width = Look.cardWidth - 21
+        return text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .reduce(0) { total, para in
+                let h = (para as NSString).boundingRect(
+                    with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: [.font: font], context: nil).height
+                return total + max(1, Int((h / font.lineHeight).rounded()))
+            }
+    }
+
     /// Splits text into two halves, cutting at the paragraph or sentence break
     /// nearest the middle (or the nearest space if there's no good break).
     static func split(_ text: String) -> (String, String) {
