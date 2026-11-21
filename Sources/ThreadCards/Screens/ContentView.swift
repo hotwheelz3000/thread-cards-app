@@ -70,7 +70,7 @@ struct ContentView: View {
 
                     videoSection
 
-                    editSection
+                    PostEditor(post: $post, isOpen: $showEdit)
 
                     Text(BuildInfo.label)
                         .font(Theme.font(12, relativeTo: .caption2))
@@ -125,7 +125,7 @@ struct ContentView: View {
         let input = link
         loading = true
         message = ""
-        findVideos(input)
+        readPage(input)
         Task {
             do {
                 let f = try await PostFetcher.fetch(input)
@@ -169,13 +169,13 @@ struct ContentView: View {
 
     /// Opens the post page in the background: finds videos, the post it replies
     /// to and the author's next posts in the thread, then reads those posts.
-    private func findVideos(_ input: String, threadToo: Bool = true) {
+    private func readPage(_ input: String, threadToo: Bool = true) {
         videos = []
         guard let url = PostFetcher.postURL(from: input) else { return }
         findingVideo = true
         let key = HistoryStore.key(input)
         Task {
-            let page = await VideoFinder.find(url)
+            let page = await PageReader.read(url)
             // Ignore the result if another post was fetched meanwhile.
             guard HistoryStore.key(link) == key else { return }
             videos = page.videoURLs
@@ -221,7 +221,7 @@ struct ContentView: View {
         videos = []
         findingVideo = false
         // Threads video links expire, so look them up again.
-        if item.hadVideo { findVideos(item.link, threadToo: false) }
+        if item.hadVideo { readPage(item.link, threadToo: false) }
     }
 
     // MARK: - Preview + save
@@ -305,128 +305,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Editor
-
-    /// "Edit post": a bordered box that opens to show every field.
-    private var editSection: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) { showEdit.toggle() }
-            } label: {
-                HStack {
-                    Text("Edit post").font(Theme.font(17, .semibold, relativeTo: .headline))
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .rotationEffect(.degrees(showEdit ? 90 : 0))
-                }
-                .foregroundStyle(Theme.text)
-                .padding(14)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if showEdit {
-                Rectangle().fill(Theme.border).frame(height: 1)
-                editor.padding(14)
-            }
-        }
-        .background(Theme.bg, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
-            .strokeBorder(Theme.border, lineWidth: 1))
-    }
-
-    private var editor: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if post.parent != nil {
-                parentEditor
-                Rectangle().fill(Theme.border).frame(height: 1).padding(.vertical, 4)
-                Text("Reply").fieldLabel()
-            }
-            field("Username", $post.username)
-            Toggle(isOn: $post.verified) {
-                Text("Verified checkmark").font(Theme.font(16)).foregroundStyle(Theme.text)
-            }
-            .tint(Theme.track)
-            field("Time (e.g. 6h)", $post.time, plain: false)
-            Text(post.followUps.isEmpty ? "Post text" : "Post 1").fieldLabel()
-            textBox($post.text, minHeight: 160)
-            ForEach(post.followUps.indices, id: \.self) { i in
-                HStack {
-                    Text("Post \(i + 2)").fieldLabel()
-                    Spacer()
-                    removeButton { post.followUps.remove(at: i) }
-                }
-                textBox(Binding(
-                    get: { i < post.followUps.count ? post.followUps[i] : "" },
-                    set: { if i < post.followUps.count { post.followUps[i] = $0 } }
-                ), minHeight: 120)
-            }
-            Button {
-                post.followUps.append("")
-            } label: {
-                Label("Add next post", systemImage: "plus")
-                    .font(Theme.font(15, .semibold, relativeTo: .callout))
-                    .foregroundStyle(Theme.text)
-            }
-            .buttonStyle(.plain)
-            HStack(spacing: 8) {
-                field("Likes", $post.likes, plain: false)
-                field("Replies", $post.replies, plain: false)
-                field("Reposts", $post.reposts, plain: false)
-                field("Shares", $post.shares, plain: false)
-            }
-            .keyboardType(.numbersAndPunctuation)
-        }
-    }
-
-    /// The post being replied to (card 1).
-    @ViewBuilder private var parentEditor: some View {
-        HStack {
-            Text("Original post").fieldLabel()
-            Spacer()
-            removeButton { post.parent = nil }
-        }
-        field("Username", Binding(
-            get: { post.parent?.username ?? "" },
-            set: { post.parent?.username = $0 }))
-        Toggle(isOn: Binding(
-            get: { post.parent?.verified ?? false },
-            set: { post.parent?.verified = $0 })) {
-            Text("Verified checkmark").font(Theme.font(16)).foregroundStyle(Theme.text)
-        }
-        .tint(Theme.track)
-        textBox(Binding(
-            get: { post.parent?.text ?? "" },
-            set: { post.parent?.text = $0 }), minHeight: 120)
-    }
-
-    /// A text field in the Soulection style. `plain` turns off capitals and autocorrect.
-    private func field(_ placeholder: String, _ text: Binding<String>, plain: Bool = true) -> some View {
-        TextField("", text: text, prompt: Text(placeholder).foregroundStyle(Theme.muted))
-            .textInputAutocapitalization(plain ? .never : .sentences)
-            .autocorrectionDisabled(plain)
-            .soulectionField(padding: 10)
-    }
-
-    private func textBox(_ text: Binding<String>, minHeight: CGFloat) -> some View {
-        TextEditor(text: text)
-            .scrollContentBackground(.hidden)
-            .frame(minHeight: minHeight)
-            .soulectionField(padding: 6)
-    }
-
-    private func removeButton(_ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text("Remove").font(Theme.font(13, .semibold, relativeTo: .caption))
-                .foregroundStyle(Theme.text)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Formatting (matches Threads: 6h, 2d)
 
     static func relativeTime(_ date: Date) -> String {
@@ -438,23 +316,5 @@ struct ContentView: View {
         let f = DateFormatter()
         f.dateFormat = "MM/dd/yy"
         return f.string(from: date)
-    }
-}
-
-enum PhotoSaver {
-    struct Denied: LocalizedError {
-        var errorDescription: String? {
-            "Photos access is off. Turn it on in Settings > Threads Cards > Photos."
-        }
-    }
-
-    static func save(_ pngs: [Data]) async throws {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized || status == .limited else { throw Denied() }
-        try await PHPhotoLibrary.shared().performChanges {
-            for data in pngs {
-                PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
-            }
-        }
     }
 }

@@ -13,7 +13,6 @@ enum Theme {
     static let track = Color(white: 105 / 255)                                    // rgb(105,105,105)
     static let accent = Color.white
     static let pressed = Color.white.opacity(0.06)
-    static let raised = Color(red: 42 / 255, green: 42 / 255, blue: 42 / 255) // rgb(42,42,42) button fill
     static let corner: CGFloat = 9
 
     enum Weight: String {
@@ -37,11 +36,9 @@ enum Theme {
 }
 
 /// White pill with dark text (like Soulection's "Let's go"), or an outlined pill.
-/// `fill` gives an outlined pill a background (e.g. Theme.raised); `outline`
-/// sets its border color; `dims` fades it while disabled.
+/// `outline` sets an outlined pill's border color; `dims` fades it while disabled.
 struct PillButtonStyle: ButtonStyle {
     var filled = true
-    var fill: Color = .clear
     var outline: Color = Theme.border
     var dims = true
     @Environment(\.isEnabled) private var isEnabled
@@ -53,8 +50,7 @@ struct PillButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .frame(minHeight: 50)
             .padding(.horizontal, 14)
-            .background(Capsule().fill(filled ? Theme.accent : fill))
-            .background(Capsule().fill(!filled && configuration.isPressed ? Theme.pressed : .clear))
+            .background(Capsule().fill(filled ? Theme.accent : (configuration.isPressed ? Theme.pressed : .clear)))
             .overlay(Capsule().strokeBorder(filled ? .clear : outline, lineWidth: 1))
             .opacity(isEnabled || !dims ? (configuration.isPressed && filled ? 0.85 : 1) : 0.45)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)

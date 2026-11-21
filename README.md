@@ -1,14 +1,21 @@
 # Threads Cards
 
-An iPhone app that turns a Threads post into two story-size images (1080 x 1920), styled like the Threads "Add to Instagram story" card, with the **full** post text split across them (1/2 and 2/2).
+An iPhone app that turns a Threads post into story-size images (1080 x 1920) that look like the Threads "Add to Instagram story" card, but with the **full** text, and saves them to Photos.
 
 ## Use
 
 1. In Threads, tap Share > Copy link on a post.
-2. In Threads Cards, tap **Paste & Get**. The app reads the post: name, checkmark, picture, text, time and counts.
-3. Check the two previews, then tap **Save to Photos**. If the post has a video, **Save Video** saves it too.
+2. In Threads Cards, tap **Paste & Get**.
+3. Check the previews, then tap **Save to Photos**. If the post has a video, **Save Video** saves it too.
 
-If the post can't be read, open **Edit post** and type or paste the text. Every field there can be changed before saving.
+## What you get
+
+- **Threads:** when the author continued the post in a thread, each of their posts gets its own card (1/2, 2/2...), like Threads.
+- **Replies:** paste a reply's link and the post it answers comes first, each card with its own name, picture and checkmark.
+- **Long posts:** the text stays the same size; a post too long for one card continues on the next, breaking at the end of a sentence. The pills count every card (1/3, 2/3, 3/3).
+- **Short posts:** one card, no pill.
+- **History** (clock button, top right): every post you get is kept. Tap one to bring it back, swipe left to delete.
+- **Edit post:** every field can be changed before saving, including the original post and the thread's next posts. If a post can't be read, type or paste the text here.
 
 ## Download
 
@@ -20,8 +27,16 @@ https://github.com/hotwheelz3000/thread-cards-app/releases/latest
 
 Sign it when installing (Signulous, Sideloadly or AltStore).
 
-## Build
+## Code
 
-Built with [xtool](https://xtool.sh) (SwiftPM, no Xcode project) on GitHub Actions. The version is in `ThreadCards-Info.plist`; release notes are in `RELEASE_NOTES.md`.
+Built with [xtool](https://xtool.sh) (SwiftPM, no Xcode project) on GitHub Actions. Sources are in `Sources/ThreadCards/`:
+
+- `Cards/`: the post data, the card view (Threads look) and `Paginator` (spreads long posts over cards)
+- `Fetching/`: `PostFetcher` (reads a post page), `PageReader` (opens the page in a hidden web view for videos, the thread's next posts and the post being replied to), `Savers` (Photos)
+- `History/`: saved posts (`history.json` in the app's Documents folder) and the History screen
+- `Screens/`: the main screen and Edit post
+- `Theme/`: the Soulection style for the app's screens (Bai Jamjuree font in `Resources/Fonts`, SIL Open Font License)
+
+The version is in `ThreadCards-Info.plist`; release notes are in `RELEASE_NOTES.md`.
 
 Not affiliated with Threads or Meta.

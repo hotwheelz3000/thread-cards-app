@@ -1,5 +1,4 @@
 import Foundation
-import Photos
 import UIKit
 import WebKit
 
@@ -14,20 +13,15 @@ struct PageInfo: Sendable {
     /// The author's next posts in the same thread (2/2, 3/3...), as full links:
     /// the posts by the same author right after this one, up to the first post by someone else.
     var followUps: [URL] {
-        func parts(_ l: String) -> (user: String, code: String)? {
-            let c = l.split(separator: "/").map(String.init) // ["@name", "post", "CODE"]
-            guard c.count >= 3, c[0].hasPrefix("@"), c[1] == "post" else { return nil }
-            return (String(c[0].dropFirst()).lowercased(), c[2])
-        }
-        let posts = links.compactMap(parts)
+        let posts = links.compactMap(Self.parts)
         guard !posts.isEmpty else { return [] }
         var start = 0
-        if let here = parts(path), let i = posts.firstIndex(where: { $0.code == here.code }) { start = i }
+        if let here = Self.parts(path), let i = posts.firstIndex(where: { $0.code == here.code }) { start = i }
         let author = posts[start].user
         var out: [URL] = []
         for p in posts.dropFirst(start + 1) {
             guard p.user == author else { break }
-            if let u = URL(string: "https://www.threads.com/@\(p.user)/post/\(p.code)") { out.append(u) }
+            if let u = Self.url(p) { out.append(u) }
             if out.count == 9 { break }
         }
         return out
@@ -35,23 +29,28 @@ struct PageInfo: Sendable {
 
     /// The post this one replies to: the post just above it on the page.
     var parent: URL? {
-        func parts(_ l: String) -> (user: String, code: String)? {
-            let c = l.split(separator: "/").map(String.init)
-            guard c.count >= 3, c[0].hasPrefix("@"), c[1] == "post" else { return nil }
-            return (String(c[0].dropFirst()).lowercased(), c[2])
-        }
-        let posts = links.compactMap(parts)
-        guard let here = parts(path),
+        let posts = links.compactMap(Self.parts)
+        guard let here = Self.parts(path),
               let i = posts.firstIndex(where: { $0.code == here.code }), i > 0 else { return nil }
-        let p = posts[i - 1]
-        return URL(string: "https://www.threads.com/@\(p.user)/post/\(p.code)")
+        return Self.url(posts[i - 1])
+    }
+
+    /// "/@name/post/CODE" -> (name, CODE).
+    private static func parts(_ link: String) -> (user: String, code: String)? {
+        let c = link.split(separator: "/").map(String.init) // ["@name", "post", "CODE"]
+        guard c.count >= 3, c[0].hasPrefix("@"), c[1] == "post" else { return nil }
+        return (String(c[0].dropFirst()).lowercased(), c[2])
+    }
+
+    private static func url(_ p: (user: String, code: String)) -> URL? {
+        URL(string: "https://www.threads.com/@\(p.user)/post/\(p.code)")
     }
 }
 
 /// Opens a Threads post in a hidden web view (the way Safari would) and
 /// reads its video files and the other posts in the thread.
 @MainActor
-enum VideoFinder {
+enum PageReader {
     private static let script = """
     (() => {
       const out = [];
@@ -77,7 +76,7 @@ enum VideoFinder {
     """
 
     /// The post's videos and the posts around it.
-    static func find(_ postURL: URL, timeout: TimeInterval = 20) async -> PageInfo {
+    static func read(_ postURL: URL, timeout: TimeInterval = 20) async -> PageInfo {
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -100,7 +99,7 @@ enum VideoFinder {
         var steady = 0
         while Date() < deadline {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            let found = await read(web)
+            let found = await snapshot(web)
             if !found.videos.isEmpty { best.videos = found.videos }
             if found.links.count >= best.links.count { best.links = found.links }
             if !found.path.isEmpty { best.path = found.path }
@@ -117,7 +116,8 @@ enum VideoFinder {
         return best
     }
 
-    private static func read(_ web: WKWebView) async -> PageInfo {
+    /// What the page shows right now.
+    private static func snapshot(_ web: WKWebView) async -> PageInfo {
         await withCheckedContinuation { cont in
             web.evaluateJavaScript(script) { result, _ in
                 let d = result as? [String: Any]
@@ -133,41 +133,5 @@ enum VideoFinder {
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
             .first { $0.isKeyWindow }
-    }
-}
-
-enum VideoSaver {
-    struct DownloadFailed: LocalizedError {
-        var errorDescription: String? { "Couldn't download the video." }
-    }
-
-    /// Downloads each video and saves it to Photos.
-    static func save(_ urls: [URL]) async throws {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized || status == .limited else { throw PhotoSaver.Denied() }
-
-        var files: [URL] = []
-        for url in urls {
-            var request = URLRequest(url: url, timeoutInterval: 120)
-            request.setValue("https://www.threads.com/", forHTTPHeaderField: "Referer")
-            let (temp, response) = try await URLSession.shared.download(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                throw DownloadFailed()
-            }
-            let dest = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension("mp4")
-            try FileManager.default.moveItem(at: temp, to: dest)
-            files.append(dest)
-        }
-
-        let toSave = files
-        try await PHPhotoLibrary.shared().performChanges {
-            for file in toSave {
-                let options = PHAssetResourceCreationOptions()
-                options.shouldMoveFile = true
-                PHAssetCreationRequest.forAsset().addResource(with: .video, fileURL: file, options: options)
-            }
-        }
     }
 }

@@ -1,47 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Everything shown on a card. Every field is editable in the app.
-struct PostInfo {
-    var username = ""
-    var verified = true
-    var time = ""
-    var text = ""
-    /// The author's next posts in the thread (cards 2/2, 3/3...).
-    var followUps: [String] = []
-    var likes = ""
-    var replies = ""
-    var reposts = ""
-    var shares = ""
-    var avatar: UIImage?
-    /// The post this one replies to (someone else's), shown first with its own header.
-    var parent: ParentPost?
-}
-
-/// The post a reply answers: its own name, picture and checkmark.
-struct ParentPost {
-    var username = ""
-    var verified = false
-    var text = ""
-    var avatar: UIImage?
-
-    /// As a card header (no counts or time).
-    var cardPost: PostInfo {
-        var p = PostInfo()
-        p.username = username
-        p.verified = verified
-        p.text = text
-        p.avatar = avatar
-        return p
-    }
-}
-
-/// One image: whose header it shows and the text on it.
-struct Card {
-    var header: PostInfo
-    var text: String
-}
-
 /// Colors and sizes measured from the Threads "Add to Instagram story" preview.
 /// The story is 360 x 640 points, rendered at 3x = 1080 x 1920 pixels.
 enum Look {
@@ -96,20 +55,18 @@ struct CardView: View {
     let text: String
     let index: Int
     let total: Int
-    var scale: CGFloat = 1
-
-    private var bodySize: CGFloat { 15.5 * scale }
+    private let bodySize: CGFloat = 15.5
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.bottom, 9 * scale)
+                .padding(.bottom, 9)
 
-            VStack(alignment: .leading, spacing: 6 * scale) {
+            VStack(alignment: .leading, spacing: 6) {
                 ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, p in
                     Text(p)
                         .font(.system(size: bodySize))
-                        .lineSpacing(2.2 * scale)
+                        .lineSpacing(2.2)
                         .foregroundStyle(Look.text)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -117,16 +74,16 @@ struct CardView: View {
 
             if total > 1 {
                 Text("\(index)/\(total)")
-                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Look.gray)
-                    .padding(.horizontal, 4.5 * scale)
-                    .frame(height: 19 * scale)
-                    .background(Look.pill, in: RoundedRectangle(cornerRadius: 6 * scale, style: .continuous))
-                    .padding(.top, 8 * scale)
+                    .padding(.horizontal, 4.5)
+                    .frame(height: 19)
+                    .background(Look.pill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(.top, 8)
             }
 
             if hasStats {
-                stats.padding(.top, 8 * scale)
+                stats.padding(.top, 8)
             }
         }
         .padding(.horizontal, 10.5)
@@ -151,9 +108,9 @@ struct CardView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 0) {
             avatar
-                .frame(width: 31 * scale, height: 31 * scale)
+                .frame(width: 31, height: 31)
                 .clipShape(Circle())
-                .padding(.trailing, 11 * scale)
+                .padding(.trailing, 11)
 
             Text(post.username.isEmpty ? "username" : post.username)
                 .font(.system(size: bodySize, weight: .semibold))
@@ -164,21 +121,21 @@ struct CardView: View {
                 Image(systemName: "checkmark.seal.fill")
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, Look.blue)
-                    .font(.system(size: 12.5 * scale))
-                    .padding(.leading, 3 * scale)
+                    .font(.system(size: 12.5))
+                    .padding(.leading, 3)
             }
 
             if !post.time.isEmpty {
                 Text(post.time)
                     .font(.system(size: bodySize))
                     .foregroundStyle(Look.gray)
-                    .padding(.leading, 6.5 * scale)
+                    .padding(.leading, 6.5)
             }
 
             Spacer(minLength: 8)
 
             Image(systemName: "at")
-                .font(.system(size: 15 * scale, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Look.text)
         }
     }
@@ -190,7 +147,7 @@ struct CardView: View {
             ZStack {
                 Color(white: 0.25)
                 Image(systemName: "person.fill")
-                    .font(.system(size: 15 * scale))
+                    .font(.system(size: 15))
                     .foregroundStyle(Color(white: 0.55))
             }
         }
@@ -201,7 +158,7 @@ struct CardView: View {
     }
 
     private var stats: some View {
-        HStack(spacing: 20 * scale) {
+        HStack(spacing: 20) {
             stat("heart", post.likes)
             stat("bubble.left", post.replies)
             stat("arrow.2.squarepath", post.reposts)
@@ -211,11 +168,11 @@ struct CardView: View {
 
     @ViewBuilder private func stat(_ icon: String, _ value: String) -> some View {
         if !value.isEmpty {
-            HStack(spacing: 4 * scale) {
+            HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 14.5 * scale))
+                    .font(.system(size: 14.5))
                 Text(value)
-                    .font(.system(size: 15 * scale))
+                    .font(.system(size: 15))
             }
             .foregroundStyle(Look.gray)
         }
