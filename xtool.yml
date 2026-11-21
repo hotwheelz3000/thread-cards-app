@@ -6,3 +6,9 @@ product: ThreadCards
 infoPath: ThreadCards-Info.plist
 # 1024x1024 opaque PNG (stacked cards).
 iconPath: Resources/AppIcon.png
+# Bai Jamjuree (SIL Open Font License, Resources/Fonts/OFL.txt), copied to the app bundle root.
+resources:
+  - Resources/Fonts/BaiJamjuree-Regular.ttf
+  - Resources/Fonts/BaiJamjuree-Medium.ttf
+  - Resources/Fonts/BaiJamjuree-SemiBold.ttf
+  - Resources/Fonts/BaiJamjuree-Bold.ttf

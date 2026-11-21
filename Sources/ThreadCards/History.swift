@@ -119,35 +119,39 @@ struct HistoryView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.posts.isEmpty {
-                    Text("Posts you get show up here.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    List {
-                        ForEach(store.posts) { item in
-                            Button {
-                                open(item)
-                                dismiss()
-                            } label: {
-                                row(item)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .onDelete { store.delete(at: $0) }
-                    }
-                    .listStyle(.plain)
-                }
+        VStack(spacing: 0) {
+            TopBar(title: "History") {
+                Button("Done") { dismiss() }
+                    .font(Theme.font(17, .semibold, relativeTo: .headline))
+                    .foregroundStyle(.white)
             }
-            .navigationTitle("History")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+
+            if store.posts.isEmpty {
+                Spacer()
+                Text("Posts you get show up here.")
+                    .font(Theme.font(16))
+                    .foregroundStyle(Theme.muted)
+                Spacer()
+            } else {
+                List {
+                    ForEach(store.posts) { item in
+                        Button {
+                            open(item)
+                            dismiss()
+                        } label: {
+                            row(item)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Theme.bg)
+                        .listRowSeparatorTint(Theme.border)
+                    }
+                    .onDelete { store.delete(at: $0) }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(Theme.bg.ignoresSafeArea())
     }
 
     private func row(_ item: SavedPost) -> some View {
@@ -156,33 +160,34 @@ struct HistoryView: View {
                 if let data = item.avatar, let img = UIImage(data: data) {
                     Image(uiImage: img).resizable().scaledToFill()
                 } else {
-                    Color(white: 0.25)
+                    Theme.border
                 }
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 44, height: 44)
             .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Text(item.username.isEmpty ? "Unknown" : item.username)
-                        .font(.subheadline.weight(.semibold))
+                        .font(Theme.font(16, .semibold))
+                        .foregroundStyle(.white)
                     if item.hadVideo {
                         Image(systemName: "video.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
                     }
                     Spacer()
                     Text(item.savedAt, format: .dateTime.month(.abbreviated).day())
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.font(13, relativeTo: .caption))
+                        .foregroundStyle(Theme.muted)
                 }
                 Text(item.text.components(separatedBy: "\n").first ?? "")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.font(15, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.text)
                     .lineLimit(2)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
     }
 }

@@ -10,6 +10,13 @@
     <string>1</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Thread Cards saves the post images to your Photos.</string>
+    <key>UIAppFonts</key>
+    <array>
+        <string>BaiJamjuree-Regular.ttf</string>
+        <string>BaiJamjuree-Medium.ttf</string>
+        <string>BaiJamjuree-SemiBold.ttf</string>
+        <string>BaiJamjuree-Bold.ttf</string>
+    </array>
     <key>UIUserInterfaceStyle</key>
     <string>Dark</string>
 </dict>

@@ -7,3 +7,4 @@
 - **Save to Photos** puts the card images in your camera roll.
 - **Save Video:** when the post has a video (or several), one tap saves it to Photos.
 - Every field can be edited (including the thread's next posts), and if the fetch fails you can type or paste the text yourself.
+- **Look:** the app's screens use the Soulection style (dark #1A1A1A, thin borders, Bai Jamjuree, white pill buttons). The story cards keep the Threads look.

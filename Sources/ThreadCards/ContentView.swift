@@ -30,15 +30,27 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            TopBar(title: "Thread Cards") {
+                Button {
+                    showHistory = true
+                } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("History")
+            }
+
             ScrollView {
                 VStack(spacing: 16) {
                     linkBox
 
                     if !message.isEmpty {
                         Text(message)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .font(Theme.font(14, relativeTo: .footnote))
+                            .foregroundStyle(Theme.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -49,38 +61,30 @@ struct ContentView: View {
 
                     if findingVideo {
                         HStack(spacing: 8) {
-                            ProgressView()
+                            ProgressView().tint(Theme.text)
                             Text("Looking for the rest of the thread and videos...")
-                                .font(.footnote).foregroundStyle(.secondary)
+                                .font(Theme.font(14, relativeTo: .footnote))
+                                .foregroundStyle(Theme.muted)
                         }
                     }
 
                     videoSection
 
-                    DisclosureGroup("Edit post", isExpanded: $showEdit) { editor }
-                        .padding(12)
-                        .background(Color(white: 0.11), in: RoundedRectangle(cornerRadius: 12))
+                    editSection
 
                     Text(BuildInfo.label)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                        .font(Theme.font(12, relativeTo: .caption2))
+                        .foregroundStyle(Theme.muted)
                 }
-                .padding()
+                .padding(16)
             }
-            .navigationTitle("Thread Cards")
             .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showHistory = true
-                    } label: {
-                        Image(systemName: "clock.arrow.circlepath")
-                    }
-                }
-            }
-            .sheet(isPresented: $showHistory) {
-                HistoryView(store: history) { item in openSaved(item) }
-            }
+        }
+        .background(Theme.bg.ignoresSafeArea())
+        .tint(Theme.accent)
+        .sheet(isPresented: $showHistory) {
+            HistoryView(store: history) { item in openSaved(item) }
+                .presentationBackground(Theme.bg)
         }
     }
 
@@ -88,12 +92,11 @@ struct ContentView: View {
 
     private var linkBox: some View {
         VStack(spacing: 10) {
-            TextField("Threads post link", text: $link)
+            TextField("", text: $link, prompt: Text("Threads post link").foregroundStyle(Theme.muted))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
-                .padding(12)
-                .background(Color(white: 0.11), in: RoundedRectangle(cornerRadius: 12))
+                .soulectionField()
 
             HStack(spacing: 10) {
                 Button {
@@ -101,22 +104,20 @@ struct ContentView: View {
                     fetch()
                 } label: {
                     Label("Paste & Get", systemImage: "doc.on.clipboard")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PillButtonStyle())
 
                 Button {
                     fetch()
                 } label: {
                     Label("Get", systemImage: "arrow.down.circle")
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(PillButtonStyle(filled: false))
                 .disabled(link.isEmpty)
             }
             .disabled(loading)
 
-            if loading { ProgressView() }
+            if loading { ProgressView().tint(Theme.text) }
         }
     }
 
@@ -234,7 +235,9 @@ struct ContentView: View {
                         StoryView(post: card.header, text: card.text, index: i + 1, total: parts.count)
                             .scaleEffect(previewScale, anchor: .topLeading)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                        .strokeBorder(Theme.border, lineWidth: 1))
                 }
             }
         }
@@ -245,11 +248,8 @@ struct ContentView: View {
             save()
         } label: {
             Label(saving ? "Saving..." : "Save to Photos", systemImage: "square.and.arrow.down")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(PillButtonStyle())
         .disabled(saving)
     }
 
@@ -285,11 +285,8 @@ struct ContentView: View {
             } label: {
                 Label(savingVideo ? "Saving video..." : (videos.count == 1 ? "Save Video" : "Save \(videos.count) Videos"),
                       systemImage: "video.badge.plus")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(PillButtonStyle(filled: false))
             .disabled(savingVideo)
         }
     }
@@ -310,75 +307,124 @@ struct ContentView: View {
 
     // MARK: - Editor
 
+    /// "Edit post": a bordered box that opens to show every field.
+    private var editSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { showEdit.toggle() }
+            } label: {
+                HStack {
+                    Text("Edit post").font(Theme.font(17, .semibold, relativeTo: .headline))
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .rotationEffect(.degrees(showEdit ? 90 : 0))
+                }
+                .foregroundStyle(Theme.text)
+                .padding(14)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showEdit {
+                Rectangle().fill(Theme.border).frame(height: 1)
+                editor.padding(14)
+            }
+        }
+        .background(Theme.bg, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+            .strokeBorder(Theme.border, lineWidth: 1))
+    }
+
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
             if post.parent != nil {
                 parentEditor
-                Divider()
-                Text("Reply").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Rectangle().fill(Theme.border).frame(height: 1).padding(.vertical, 4)
+                Text("Reply").fieldLabel()
             }
-            TextField("Username", text: $post.username)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            Toggle("Verified checkmark", isOn: $post.verified)
-            TextField("Time (e.g. 6h)", text: $post.time)
-            Text(post.followUps.isEmpty ? "Post text" : "Post 1").font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: $post.text)
-                .frame(minHeight: 160)
-                .scrollContentBackground(.hidden)
-                .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
+            field("Username", $post.username)
+            Toggle(isOn: $post.verified) {
+                Text("Verified checkmark").font(Theme.font(16)).foregroundStyle(Theme.text)
+            }
+            .tint(Theme.track)
+            field("Time (e.g. 6h)", $post.time, plain: false)
+            Text(post.followUps.isEmpty ? "Post text" : "Post 1").fieldLabel()
+            textBox($post.text, minHeight: 160)
             ForEach(post.followUps.indices, id: \.self) { i in
                 HStack {
-                    Text("Post \(i + 2)").font(.caption).foregroundStyle(.secondary)
+                    Text("Post \(i + 2)").fieldLabel()
                     Spacer()
-                    Button("Remove", role: .destructive) { post.followUps.remove(at: i) }
-                        .font(.caption)
+                    removeButton { post.followUps.remove(at: i) }
                 }
-                TextEditor(text: Binding(
+                textBox(Binding(
                     get: { i < post.followUps.count ? post.followUps[i] : "" },
                     set: { if i < post.followUps.count { post.followUps[i] = $0 } }
-                ))
-                    .frame(minHeight: 120)
-                    .scrollContentBackground(.hidden)
-                    .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
+                ), minHeight: 120)
             }
-            Button("Add next post") { post.followUps.append("") }
-                .font(.callout)
-            HStack {
-                TextField("Likes", text: $post.likes)
-                TextField("Replies", text: $post.replies)
-                TextField("Reposts", text: $post.reposts)
-                TextField("Shares", text: $post.shares)
+            Button {
+                post.followUps.append("")
+            } label: {
+                Label("Add next post", systemImage: "plus")
+                    .font(Theme.font(15, .semibold, relativeTo: .callout))
+                    .foregroundStyle(Theme.text)
+            }
+            .buttonStyle(.plain)
+            HStack(spacing: 8) {
+                field("Likes", $post.likes, plain: false)
+                field("Replies", $post.replies, plain: false)
+                field("Reposts", $post.reposts, plain: false)
+                field("Shares", $post.shares, plain: false)
             }
             .keyboardType(.numbersAndPunctuation)
-            .font(.callout)
         }
-        .textFieldStyle(.roundedBorder)
-        .padding(.top, 8)
     }
 
     /// The post being replied to (card 1).
     @ViewBuilder private var parentEditor: some View {
         HStack {
-            Text("Original post").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text("Original post").fieldLabel()
             Spacer()
-            Button("Remove", role: .destructive) { post.parent = nil }
-                .font(.caption)
+            removeButton { post.parent = nil }
         }
-        TextField("Username", text: Binding(
+        field("Username", Binding(
             get: { post.parent?.username ?? "" },
             set: { post.parent?.username = $0 }))
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-        Toggle("Verified checkmark", isOn: Binding(
+        Toggle(isOn: Binding(
             get: { post.parent?.verified ?? false },
-            set: { post.parent?.verified = $0 }))
-        TextEditor(text: Binding(
+            set: { post.parent?.verified = $0 })) {
+            Text("Verified checkmark").font(Theme.font(16)).foregroundStyle(Theme.text)
+        }
+        .tint(Theme.track)
+        textBox(Binding(
             get: { post.parent?.text ?? "" },
-            set: { post.parent?.text = $0 }))
-            .frame(minHeight: 120)
+            set: { post.parent?.text = $0 }), minHeight: 120)
+    }
+
+    /// A text field in the Soulection style. `plain` turns off capitals and autocorrect.
+    private func field(_ placeholder: String, _ text: Binding<String>, plain: Bool = true) -> some View {
+        TextField("", text: text, prompt: Text(placeholder).foregroundStyle(Theme.muted))
+            .textInputAutocapitalization(plain ? .never : .sentences)
+            .autocorrectionDisabled(plain)
+            .soulectionField(padding: 10)
+    }
+
+    private func textBox(_ text: Binding<String>, minHeight: CGFloat) -> some View {
+        TextEditor(text: text)
             .scrollContentBackground(.hidden)
-            .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
+            .frame(minHeight: minHeight)
+            .soulectionField(padding: 6)
+    }
+
+    private func removeButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text("Remove").font(Theme.font(13, .semibold, relativeTo: .caption))
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .overlay(Capsule().strokeBorder(Theme.border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Formatting (matches Threads: 6h, 2d)
