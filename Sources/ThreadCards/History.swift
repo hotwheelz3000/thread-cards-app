@@ -10,6 +10,7 @@ struct SavedPost: Codable, Identifiable, Equatable {
     var time: String
     var text: String
     var followUps: [String]?
+    var parent: SavedParent?
     var likes: String
     var replies: String
     var reposts: String
@@ -25,6 +26,10 @@ struct SavedPost: Codable, Identifiable, Equatable {
         time = post.time
         text = post.text
         followUps = post.followUps
+        parent = post.parent.map {
+            SavedParent(username: $0.username, verified: $0.verified, text: $0.text,
+                        avatar: $0.avatar?.jpegData(compressionQuality: 0.85))
+        }
         likes = post.likes
         replies = post.replies
         reposts = post.reposts
@@ -41,6 +46,10 @@ struct SavedPost: Codable, Identifiable, Equatable {
         p.time = time
         p.text = text
         p.followUps = followUps ?? []
+        p.parent = parent.map {
+            ParentPost(username: $0.username, verified: $0.verified, text: $0.text,
+                       avatar: $0.avatar.flatMap(UIImage.init(data:)))
+        }
         p.likes = likes
         p.replies = replies
         p.reposts = reposts
@@ -48,6 +57,13 @@ struct SavedPost: Codable, Identifiable, Equatable {
         p.avatar = avatar.flatMap(UIImage.init(data:))
         return p
     }
+}
+
+struct SavedParent: Codable, Equatable {
+    var username: String
+    var verified: Bool
+    var text: String
+    var avatar: Data?
 }
 
 /// History, newest first, kept in history.json in the app's Documents folder

@@ -17,10 +17,16 @@ struct ContentView: View {
     /// The link of the post on screen (for History).
     @State private var shownLink = ""
 
-    /// The linked post, then the author's follow-ups; a post too long for one
-    /// card continues on the next. The pills count every card (1/3, 2/3, 3/3).
-    private var parts: [String] {
-        ([post.text] + post.followUps).flatMap(Paginator.pages)
+    /// The post it replies to (if any), the linked post, then the author's
+    /// follow-ups; a post too long for one card continues on the next.
+    /// The pills count every card (1/3, 2/3, 3/3).
+    private var parts: [Card] {
+        var cards: [Card] = []
+        if let parent = post.parent {
+            cards += Paginator.pages(parent.text).map { Card(header: parent.cardPost, text: $0) }
+        }
+        cards += ([post.text] + post.followUps).flatMap(Paginator.pages).map { Card(header: post, text: $0) }
+        return cards
     }
 
     var body: some View {
@@ -134,7 +140,14 @@ struct ContentView: View {
                 if let url = f.avatarURL, let data = await PostFetcher.downloadImage(url) {
                     p.avatar = UIImage(data: data)
                 }
-                p.followUps = post.followUps.isEmpty || shownLink != input ? pendingFollowUps(for: input) : post.followUps
+                if shownLink == input {
+                    p.followUps = post.followUps
+                    p.parent = post.parent
+                }
+                if let early = earlyExtras[HistoryStore.key(input)] {
+                    if p.followUps.isEmpty { p.followUps = early.followUps }
+                    if p.parent == nil { p.parent = early.parent }
+                }
                 post = p
                 shownLink = input
                 history.save(link: input, post: p, hadVideo: !videos.isEmpty)
@@ -150,15 +163,11 @@ struct ContentView: View {
         }
     }
 
-    /// Follow-up texts found before the main post finished loading.
-    @State private var earlyFollowUps: [String: [String]] = [:]
+    /// Thread posts found before the main post finished loading.
+    @State private var earlyExtras: [String: (followUps: [String], parent: ParentPost?)] = [:]
 
-    private func pendingFollowUps(for input: String) -> [String] {
-        earlyFollowUps[HistoryStore.key(input)] ?? []
-    }
-
-    /// Opens the post page in the background: finds videos and the author's
-    /// next posts in the thread, then reads each of those posts' text.
+    /// Opens the post page in the background: finds videos, the post it replies
+    /// to and the author's next posts in the thread, then reads those posts.
     private func findVideos(_ input: String, threadToo: Bool = true) {
         videos = []
         guard let url = PostFetcher.postURL(from: input) else { return }
@@ -178,16 +187,27 @@ struct ContentView: View {
                     texts.append(t)
                 }
             }
+
+            var parent: ParentPost?
+            if threadToo, let up = page.parent, let f = try? await PostFetcher.fetch(up.absoluteString),
+               let t = f.text, !t.isEmpty {
+                var pp = ParentPost(username: f.username ?? "", verified: f.verified ?? false, text: t)
+                if let a = f.avatarURL, let data = await PostFetcher.downloadImage(a) {
+                    pp.avatar = UIImage(data: data)
+                }
+                parent = pp
+            }
             guard HistoryStore.key(link) == key else { return }
             findingVideo = false
 
             if HistoryStore.key(shownLink) == key {
                 if threadToo, !texts.isEmpty { post.followUps = texts }
-                if !texts.isEmpty || !videos.isEmpty {
+                if threadToo, let parent { post.parent = parent }
+                if !texts.isEmpty || parent != nil || !videos.isEmpty {
                     history.save(link: input, post: post, hadVideo: !videos.isEmpty)
                 }
-            } else if !texts.isEmpty {
-                earlyFollowUps[key] = texts // the main post is still loading
+            } else if !texts.isEmpty || parent != nil {
+                earlyExtras[key] = (texts, parent) // the main post is still loading
             }
         }
     }
@@ -209,9 +229,9 @@ struct ContentView: View {
         let previewScale: CGFloat = 0.62
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 12) {
-                ForEach(Array(parts.enumerated()), id: \.offset) { i, text in
+                ForEach(Array(parts.enumerated()), id: \.offset) { i, card in
                     Scaled(scale: previewScale) {
-                        StoryView(post: post, text: text, index: i + 1, total: parts.count)
+                        StoryView(post: card.header, text: card.text, index: i + 1, total: parts.count)
                             .scaleEffect(previewScale, anchor: .topLeading)
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -236,15 +256,15 @@ struct ContentView: View {
     private func save() {
         saving = true
         let cards = parts
-        let images = cards.enumerated().compactMap { i, text -> Data? in
-            let renderer = ImageRenderer(content: StoryView(post: post, text: text, index: i + 1, total: cards.count))
+        let images = cards.enumerated().compactMap { i, card -> Data? in
+            let renderer = ImageRenderer(content: StoryView(post: card.header, text: card.text, index: i + 1, total: cards.count))
             renderer.scale = 3
             return renderer.uiImage?.pngData()
         }
         Task {
             do {
                 try await PhotoSaver.save(images)
-                message = images.count == 1 ? "Saved the card to Photos." : "Saved both cards to Photos."
+                message = images.count == 1 ? "Saved the card to Photos." : "Saved \(images.count) cards to Photos."
                 // Keeps any edits in History.
                 if !shownLink.isEmpty {
                     history.save(link: shownLink, post: post, hadVideo: !videos.isEmpty)
@@ -292,6 +312,11 @@ struct ContentView: View {
 
     private var editor: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if post.parent != nil {
+                parentEditor
+                Divider()
+                Text("Reply").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            }
             TextField("Username", text: $post.username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -330,6 +355,30 @@ struct ContentView: View {
         }
         .textFieldStyle(.roundedBorder)
         .padding(.top, 8)
+    }
+
+    /// The post being replied to (card 1).
+    @ViewBuilder private var parentEditor: some View {
+        HStack {
+            Text("Original post").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Spacer()
+            Button("Remove", role: .destructive) { post.parent = nil }
+                .font(.caption)
+        }
+        TextField("Username", text: Binding(
+            get: { post.parent?.username ?? "" },
+            set: { post.parent?.username = $0 }))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        Toggle("Verified checkmark", isOn: Binding(
+            get: { post.parent?.verified ?? false },
+            set: { post.parent?.verified = $0 }))
+        TextEditor(text: Binding(
+            get: { post.parent?.text ?? "" },
+            set: { post.parent?.text = $0 }))
+            .frame(minHeight: 120)
+            .scrollContentBackground(.hidden)
+            .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Formatting (matches Threads: 6h, 2d)

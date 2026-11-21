@@ -32,6 +32,20 @@ struct PageInfo: Sendable {
         }
         return out
     }
+
+    /// The post this one replies to: the post just above it on the page.
+    var parent: URL? {
+        func parts(_ l: String) -> (user: String, code: String)? {
+            let c = l.split(separator: "/").map(String.init)
+            guard c.count >= 3, c[0].hasPrefix("@"), c[1] == "post" else { return nil }
+            return (String(c[0].dropFirst()).lowercased(), c[2])
+        }
+        let posts = links.compactMap(parts)
+        guard let here = parts(path),
+              let i = posts.firstIndex(where: { $0.code == here.code }), i > 0 else { return nil }
+        let p = posts[i - 1]
+        return URL(string: "https://www.threads.com/@\(p.user)/post/\(p.code)")
+    }
 }
 
 /// Opens a Threads post in a hidden web view (the way Safari would) and
