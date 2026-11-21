@@ -105,14 +105,14 @@ struct ContentView: View {
                 } label: {
                     Label("Paste & Get", systemImage: "doc.on.clipboard")
                 }
-                .buttonStyle(PillButtonStyle())
+                .buttonStyle(PillButtonStyle(filled: false, fill: Theme.raised, outline: Theme.track))
 
                 Button {
                     fetch()
                 } label: {
                     Label("Get", systemImage: "arrow.down.circle")
                 }
-                .buttonStyle(PillButtonStyle(filled: false))
+                .buttonStyle(PillButtonStyle(filled: false, outline: Theme.track, dims: false))
                 .disabled(link.isEmpty)
             }
             .disabled(loading)
