@@ -105,7 +105,7 @@ struct ContentView: View {
                 } label: {
                     Label("Paste & Get", systemImage: "doc.on.clipboard")
                 }
-                .buttonStyle(PillButtonStyle(filled: false, fill: Theme.raised, outline: Theme.track))
+                .buttonStyle(PillButtonStyle(filled: false, outline: Theme.track))
 
                 Button {
                     fetch()
