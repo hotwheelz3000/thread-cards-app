@@ -137,7 +137,7 @@ jobs:
 
       # Every build of main is also published as the "latest" GitHub Release, so testers
       # can download the IPA from a plain link (no GitHub login; artifacts need one).
-      # The title carries the app's version ("Thread Cards 1.0"); the notes come from
+      # The title carries the app's version ("Threads Cards 1.0"); the notes come from
       # RELEASE_NOTES.md plus the build time. A release left as a draft (it happened once)
       # is published at the end, so the download link always works.
       - name: Publish as latest release
@@ -149,7 +149,7 @@ jobs:
           label: ${{ steps.stamp.outputs.label }}
           version: ${{ steps.info.outputs.version }}
         run: |
-          title="Thread Cards${version:+ $version}"
+          title="Threads Cards${version:+ $version}"
           {
             if [ -f RELEASE_NOTES.md ]; then cat RELEASE_NOTES.md; echo; fi
             echo "Built from ${GITHUB_SHA::7} on $label (Los Angeles time). Download $file.ipa below and sign and install it (Signulous, Sideloadly or AltStore)."

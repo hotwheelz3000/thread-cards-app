@@ -1,4 +1,4 @@
-## Thread Cards 1.0
+## Threads Cards 1.0
 
 - Paste a Threads post link and the app fetches the post: name, checkmark, picture, full text and counts.
 - Story-size cards styled like the Threads share card, with the full text. When the author continued the post in the thread, each part gets its own card (1/2, 2/2...), like Threads. A post too long for one card keeps its text size and continues on the next card, breaking at the end of a sentence; the pills count every card (1/3, 2/3, 3/3).

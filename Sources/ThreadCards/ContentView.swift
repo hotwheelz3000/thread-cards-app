@@ -31,7 +31,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar(title: "Thread Cards") {
+            TopBar(title: "Threads Cards") {
                 Button {
                     showHistory = true
                 } label: {
@@ -444,7 +444,7 @@ struct ContentView: View {
 enum PhotoSaver {
     struct Denied: LocalizedError {
         var errorDescription: String? {
-            "Photos access is off. Turn it on in Settings > Thread Cards > Photos."
+            "Photos access is off. Turn it on in Settings > Threads Cards > Photos."
         }
     }
 
