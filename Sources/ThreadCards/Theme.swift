@@ -83,15 +83,17 @@ extension View {
     }
 }
 
-/// Flat top bar with a border underneath, like soulection-app's.
+/// Flat top bar with a border underneath, like soulection-app's; the title is in
+/// Threads' screen font (SF Pro Bold).
 struct TopBar<Trailing: View>: View {
     let title: String
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         HStack {
+            // Apple's system font (SF Pro) in bold, as on Threads' own screens.
             Text(title)
-                .font(Theme.font(19, .semibold, relativeTo: .headline))
+                .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(.white)
             Spacer()
             trailing
