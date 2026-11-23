@@ -41,9 +41,8 @@ The version is in `ThreadCards-Info.plist`; release notes are in `RELEASE_NOTES.
 
 Not affiliated with Threads or Meta.
 
-## Logs and updates
+## Updates
 
-- **Share logs:** shake the phone anywhere in the app to share `app.log`, which includes crashes. Send it along with bug reports.
 - **Update feed:** each release also has `source.json`, an AltStore-format source. Add this URL in a sideloading app that supports sources to see new builds as updates:
 
 ```
