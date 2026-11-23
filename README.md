@@ -40,3 +40,12 @@ Built with [xtool](https://xtool.sh) (SwiftPM, no Xcode project) on GitHub Actio
 The version is in `ThreadCards-Info.plist`; release notes are in `RELEASE_NOTES.md`.
 
 Not affiliated with Threads or Meta.
+
+## Logs and updates
+
+- **Share logs:** shake the phone anywhere in the app to share `app.log`, which includes crashes. Send it along with bug reports.
+- **Update feed:** each release also has `source.json`, an AltStore-format source. Add this URL in a sideloading app that supports sources to see new builds as updates:
+
+```
+https://github.com/hotwheelz3000/thread-cards-app/releases/download/latest/source.json
+```

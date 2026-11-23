@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct ThreadCardsApp: App {
     init() {
+        AppLog.installCrashHandlers()
         Theme.registerFonts()
     }
 
