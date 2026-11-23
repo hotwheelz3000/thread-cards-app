@@ -48,3 +48,8 @@ Not affiliated with Threads or Meta.
 ```
 https://github.com/hotwheelz3000/thread-cards-app/releases/download/latest/source.json
 ```
+
+## Checks before each build
+
+- **JavaScript check:** `scripts/check-js.py` runs `node --check` on every script held in a Swift multi-line string. A syntax error stops the build and points at the Swift file and line.
+- **Dependabot:** `.github/dependabot.yml` opens a pull request each week when the build's GitHub Actions have updates. Merge it to update.
